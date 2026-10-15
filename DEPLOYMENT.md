@@ -1,43 +1,27 @@
-# TrustRAG deployment and GitHub guide
+# TrustRAG deployment guide
 
-Use this checklist when publishing TrustRAG as a public portfolio project.
+The source repository is already public at
+<https://github.com/BBhanuKiran/TrustRAG>. The FastAPI website currently runs
+locally; this guide covers deploying it as a hosted service.
 
-## Before you publish the source
+## Before hosting
 
-1. Create a new **empty** GitHub repository under the account that should own
-   this project.
-2. Do not add an API key, password, `.env`, SQLite database, user upload, or
-   private PDF to the repository.
-3. This workspace has no configured GitHub remote. Add your repository URL
-   only after confirming the correct GitHub account and destination:
-
-   ```powershell
-   git remote add origin https://github.com/YOUR-ACCOUNT/YOUR-REPOSITORY.git
-   git branch -M main
-   git add .gitignore .dockerignore .env.example .github Dockerfile DEPLOYMENT.md README.md app.py answering.py auth.py combined_search.py create_sample_pdf.py evaluate_retrieval.py evaluation pdf_reader.py rag_engine.py render.yaml requirements.txt run_trustrag.bat search.py support.py tests ui.py web
-   git status --short
-   git diff --cached --check
-   git commit -m "Build secure public TrustRAG research assistant"
-   git push -u origin main
-   ```
-
-   Inspect `git status` before committing. `data/` is deliberately excluded
-   from that command because local databases, uploads, and personal research
-   must never be published. Add a demonstration PDF only after verifying that
-   you own its distribution rights and that it contains no private information.
-
-4. GitHub Actions runs unit tests on the push. Resolve failed checks before
-   deployment.
+1. Create or sign in to a Render account and connect the GitHub repository.
+2. Review Render's current service and persistent-disk charges before creating
+   resources. Do not proceed unless you approve any displayed costs.
+3. Keep API keys, passwords, `.env`, SQLite databases, user uploads, and
+   private PDFs out of GitHub.
 
 ## Deploy on Render
 
-1. Create a Render account and connect the GitHub repository.
-2. Create a **Blueprint** using the repository's `render.yaml`, or select
-   Docker when creating a web service.
-3. Ensure the service has a persistent disk mounted at `/var/data`; SQLite
+1. In Render, create a **Blueprint** from the GitHub repository and use
+   `render.yaml`.
+2. Review the resources and displayed costs, then create the service only if
+   you approve them.
+3. Add `TRUSTRAG_LLM_API_KEY` as a private service environment variable. Never
+   put it in the repository, logs, or browser code.
+4. Ensure the service has a persistent disk mounted at `/var/data`; SQLite
    user accounts, sessions, and private passages must persist across deploys.
-4. Set `TRUSTRAG_LLM_API_KEY` as a private Render environment secret. Never
-   add it to `render.yaml`, GitHub Actions logs, or source files.
 5. Verify `TRUSTRAG_SECRET_KEY` has at least 32 characters. The Render
    blueprint requests a generated secret; keep that secret stable across
    deploys.
