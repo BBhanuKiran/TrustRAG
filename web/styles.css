@@ -298,6 +298,8 @@ a { color: inherit; }
 .user-message .message-avatar { color: var(--accent-strong); background: var(--accent-soft); }
 .user-message .message-body { border-radius: 13px 4px 13px 13px; background: var(--accent-soft); }
 .message-body .source-line { margin-top: 12px; padding-top: 9px; color: var(--accent-strong); border-top: 1px solid var(--line); font-size: 10px; font-weight: 700; }
+.source-line a, .evidence-card > a { color: var(--accent-strong); text-decoration: underline; text-underline-offset: 2px; }
+.web-search-note { display: block; margin-top: 9px; color: var(--muted); font-size: 9px; }
 .evidence-list { display: grid; gap: 9px; margin-top: 12px; }
 .evidence-card { padding: 11px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface-soft); }
 .evidence-card b { color: var(--accent-strong); font-size: 10px; }
@@ -306,6 +308,8 @@ a { color: inherit; }
 .composer textarea { display: block; min-height: 62px; resize: vertical; border: 0; background: transparent; font-size: 12px; }
 .composer textarea:focus { box-shadow: none; }
 .composer-bottom { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 6px; }
+.web-search-option { display: inline-flex; align-items: center; gap: 7px; color: var(--muted); font-size: 10px; }
+.web-search-option input { width: 14px; min-height: 14px; margin: 0; accent-color: var(--accent); }
 .composer-bottom > span { color: var(--muted); font-size: 9px; }
 .composer-bottom .button { min-height: 34px; padding: 0 13px; font-size: 11px; }
 .side-panel { padding: 17px; }
@@ -328,6 +332,16 @@ a { color: inherit; }
 .selected-files, .upload-zone > .form-feedback { grid-column: 2 / 4; min-height: 12px; color: var(--muted); font-size: 10px; }
 .upload-zone > .form-feedback { grid-column: 1 / -1; }
 .file-picker { justify-self: end; }
+.source-add-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 13px; margin-top: 14px; }
+.source-add-card { display: grid; align-content: start; gap: 9px; padding: 18px; border: 1px solid var(--line); border-radius: 14px; background: var(--surface); }
+.source-add-card h2 { margin: 0; font: 750 15px Manrope, sans-serif; letter-spacing: -.03em; }
+.source-add-card > p { margin: 0; color: var(--muted); font-size: 10px; line-height: 1.6; }
+.source-add-card label { color: var(--muted); font-size: 10px; font-weight: 700; }
+.source-add-card input, .source-add-card textarea { width: 100%; min-width: 0; padding: 10px 11px; border: 1px solid var(--line); border-radius: 9px; background: var(--surface-solid); font-size: 11px; }
+.source-add-card textarea { resize: vertical; }
+.source-add-card .button { justify-self: start; min-height: 35px; }
+.source-add-card .form-feedback { min-height: 14px; }
+.ocr-note { margin: 10px 2px 0; color: var(--muted); font-size: 10px; line-height: 1.6; }
 .library-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 14px; margin: 30px 0 13px; }
 .search-field { display: flex; align-items: center; gap: 8px; width: min(260px, 100%); padding-left: 10px; color: var(--muted); border: 1px solid var(--line); border-radius: 10px; background: var(--surface-solid); }
 .search-field input { padding: 9px 8px; border: 0; background: transparent; font-size: 11px; }
@@ -337,6 +351,7 @@ a { color: inherit; }
 .document-info { flex: 1; min-width: 0; }
 .document-info b { display: block; overflow: hidden; font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
 .document-info small { display: block; margin-top: 5px; color: var(--muted); font-size: 10px; }
+.document-info > a { display: inline-block; margin-top: 5px; color: var(--accent-strong); font-size: 10px; text-decoration: underline; text-underline-offset: 2px; }
 .document-row > .button { min-height: 34px; padding: 0 11px; font-size: 10px; }
 .empty-state { display: grid; justify-items: center; margin: 18px 0; padding: 50px 20px; border: 1px dashed var(--line-strong); border-radius: 15px; background: var(--surface); text-align: center; }
 .empty-state.compact { padding: 34px 20px; }
@@ -448,6 +463,7 @@ a { color: inherit; }
   .upload-zone .file-picker { grid-column: 1 / -1; justify-self: start; }
   .upload-zone > .button[type="submit"] { grid-column: 1 / -1; justify-self: start; }
   .selected-files { grid-column: 1 / -1; }
+  .source-add-grid { grid-template-columns: 1fr; }
   .library-toolbar { align-items: flex-start; flex-direction: column; }
   .search-field { width: 100%; }
   .document-row { flex-wrap: wrap; }

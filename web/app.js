@@ -75,10 +75,28 @@ function addMessage(container, text, role, details = null) {
   if (details?.citations?.length) {
     const sources = document.createElement("div");
     sources.className = "source-line";
-    sources.textContent = `Cited sources: ${details.citations.map(
-      (item) => `${item.source} · p. ${item.page}`,
-    ).join("  ·  ")}`;
+    sources.append(document.createTextNode("Cited sources: "));
+    for (const [index, item] of details.citations.entries()) {
+      if (index) sources.append(document.createTextNode(" · "));
+      const label = `${item.source}${item.page ? ` · p. ${item.page}` : ""}`;
+      if (item.url) {
+        const link = document.createElement("a");
+        link.href = item.url;
+        link.target = "_blank";
+        link.rel = "noopener noreferrer";
+        link.textContent = label;
+        sources.append(link);
+      } else {
+        sources.append(document.createTextNode(label));
+      }
+    }
     body.append(sources);
+  }
+  if (details?.web_search_included) {
+    const searchNote = document.createElement("small");
+    searchNote.className = "web-search-note";
+    searchNote.textContent = `Fresh web search included · ${details.web_sources_count} source${details.web_sources_count === 1 ? "" : "s"} retrieved`;
+    body.append(searchNote);
   }
   if (details?.evidence?.length) {
     const evidenceList = document.createElement("div");
@@ -90,10 +108,19 @@ function addMessage(container, text, role, details = null) {
       const card = document.createElement("article");
       card.className = "evidence-card";
       const meta = document.createElement("b");
-      meta.textContent = `[E${index + 1}] ${item.source} · Page ${item.page} · Relevance ${Math.round(Number(item.score) * 100)}%`;
+      const location = item.page ? ` · Page ${item.page}` : "";
+      meta.textContent = `[E${index + 1}] ${item.source}${location} · Relevance ${Math.round(Number(item.score) * 100)}%`;
       const excerpt = document.createElement("p");
       excerpt.textContent = item.text;
       card.append(meta, excerpt);
+      if (item.url) {
+        const link = document.createElement("a");
+        link.href = item.url;
+        link.target = "_blank";
+        link.rel = "noopener noreferrer";
+        link.textContent = "Open original source";
+        card.append(link);
+      }
       evidenceList.append(card);
     }
     body.append(evidenceList);
@@ -248,25 +275,36 @@ async function refreshLibrary() {
     const totalPages = documents.reduce((sum, document) => sum + Number(document.page_count), 0);
     document.getElementById("document-count").textContent = String(documents.length);
     document.getElementById("page-count").textContent = String(totalPages);
-    document.getElementById("library-count").textContent = `${documents.length} document${documents.length === 1 ? "" : "s"}`;
+    document.getElementById("library-count").textContent = `${documents.length} source${documents.length === 1 ? "" : "s"}`;
     document.getElementById("library-empty").hidden = documents.length > 0;
-    for (const document of documents) {
+    for (const sourceRecord of documents) {
       const row = document.createElement("article");
       row.className = "document-row";
       const icon = document.createElement("div");
       icon.className = "document-icon";
-      icon.textContent = "PDF";
+      icon.textContent = String(sourceRecord.source_type || "source").toUpperCase().slice(0, 4);
       const info = document.createElement("div");
       info.className = "document-info";
       const name = document.createElement("b");
-      name.textContent = document.filename;
+      name.textContent = sourceRecord.filename;
       const details = document.createElement("small");
-      details.textContent = `${document.page_count} pages · ${document.chunk_count} passages · Added ${String(document.uploaded_at).slice(0, 10)}`;
+      const pageSummary = Number(sourceRecord.page_count) > 0
+        ? `${sourceRecord.page_count} pages · `
+        : "";
+      details.textContent = `${String(sourceRecord.source_type || "source").toUpperCase()} · ${pageSummary}${sourceRecord.chunk_count} passages · Added ${String(sourceRecord.uploaded_at).slice(0, 10)}`;
       info.append(name, details);
+      if (sourceRecord.source_url) {
+        const original = document.createElement("a");
+        original.href = sourceRecord.source_url;
+        original.target = "_blank";
+        original.rel = "noopener noreferrer";
+        original.textContent = "Open original link";
+        info.append(original);
+      }
       const ask = document.createElement("button");
       ask.className = "button button-secondary";
       ask.type = "button";
-      ask.textContent = "Ask about PDFs";
+      ask.textContent = "Ask about sources";
       ask.addEventListener("click", () => {
         showView("workspace");
         questionInput.focus();
@@ -275,13 +313,13 @@ async function refreshLibrary() {
       remove.className = "button button-quiet";
       remove.type = "button";
       remove.textContent = "Delete";
-      remove.setAttribute("aria-label", `Delete ${document.filename}`);
+      remove.setAttribute("aria-label", `Delete ${sourceRecord.filename}`);
       remove.addEventListener("click", async () => {
-        if (!window.confirm(`Delete "${document.filename}" and its indexed passages?`)) return;
+        if (!window.confirm(`Delete "${sourceRecord.filename}" and its indexed passages?`)) return;
         remove.disabled = true;
         try {
-          await api(`/documents/${encodeURIComponent(document.id)}`, { method: "DELETE" });
-          showNotice("Document and indexed passages deleted.", "success");
+          await api(`/documents/${encodeURIComponent(sourceRecord.id)}`, { method: "DELETE" });
+          showNotice("Source and indexed passages deleted.", "success");
           await refreshLibrary();
         } catch (error) {
           showNotice(error.message, "error");
@@ -305,7 +343,7 @@ function filterLibrary() {
 }
 
 document.getElementById("library-search").addEventListener("input", filterLibrary);
-document.getElementById("pdf-files").addEventListener("change", (event) => {
+document.getElementById("source-files").addEventListener("change", (event) => {
   const files = [...event.target.files];
   document.getElementById("selected-files").textContent = files.length
     ? files.map((file) => `${file.name} (${(file.size / 1024 / 1024).toFixed(1)} MB)`).join(" · ")
@@ -315,7 +353,7 @@ document.getElementById("pdf-files").addEventListener("change", (event) => {
 
 document.getElementById("upload-form").addEventListener("submit", async (event) => {
   event.preventDefault();
-  const files = [...document.getElementById("pdf-files").files];
+  const files = [...document.getElementById("source-files").files];
   const submit = document.getElementById("upload-submit");
   const feedback = document.getElementById("upload-feedback");
   if (!files.length) return;
@@ -338,7 +376,7 @@ document.getElementById("upload-form").addEventListener("submit", async (event) 
       failures.push(`${file.name}: ${error.message}`);
     }
   }
-  document.getElementById("pdf-files").value = "";
+  document.getElementById("source-files").value = "";
   document.getElementById("selected-files").textContent = "No files selected";
   feedback.textContent = failures.join(" ");
   feedback.style.color = failures.length ? "#a83c38" : "var(--accent-strong)";
@@ -347,19 +385,75 @@ document.getElementById("upload-form").addEventListener("submit", async (event) 
   if (completed) await refreshLibrary();
 });
 
+document.getElementById("url-source-form").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const form = event.currentTarget;
+  const button = form.querySelector("button[type='submit']");
+  const feedback = document.getElementById("url-feedback");
+  button.disabled = true;
+  feedback.textContent = "Fetching and indexing the linked source…";
+  try {
+    const source = await api("/sources/url", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ url: document.getElementById("source-url").value.trim() }),
+    });
+    feedback.textContent = `Indexed ${source.filename} (${source.chunk_count} passages).`;
+    form.reset();
+    await refreshLibrary();
+  } catch (error) {
+    feedback.textContent = error.message;
+  } finally {
+    button.disabled = false;
+  }
+});
+
+document.getElementById("text-source-form").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const form = event.currentTarget;
+  const button = form.querySelector("button[type='submit']");
+  const feedback = document.getElementById("text-feedback");
+  button.disabled = true;
+  feedback.textContent = "Saving and indexing your text…";
+  try {
+    const source = await api("/sources/text", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        title: document.getElementById("source-title").value.trim() || "Pasted notes",
+        text: document.getElementById("source-text").value,
+      }),
+    });
+    feedback.textContent = `Indexed ${source.filename} (${source.chunk_count} passages).`;
+    form.reset();
+    await refreshLibrary();
+  } catch (error) {
+    feedback.textContent = error.message;
+  } finally {
+    button.disabled = false;
+  }
+});
+
 async function submitQuestion(question) {
   const trimmed = question.trim();
   if (!trimmed || !account) return;
   addMessage(researchMessages, trimmed, "user");
   conversation.push({ role: "user", content: trimmed });
-  const pending = addMessage(researchMessages, "Searching your private documents and checking source citations…", "assistant");
+  const includeWebSearch = document.getElementById("include-web-search").checked;
+  const pending = addMessage(
+    researchMessages,
+    includeWebSearch
+      ? "Searching your private sources and the web for current evidence…"
+      : "Searching your private sources and checking citations…",
+    "assistant",
+  );
   const formButton = document.querySelector("#question-form button[type='submit']");
   if (formButton) formButton.disabled = true;
   try {
     const result = await api("/ask", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ query: trimmed, top_k: 5 }),
+      body: JSON.stringify({ query: trimmed, top_k: 5, include_web: includeWebSearch }),
     });
     pending.remove();
     addMessage(researchMessages, result.answer, "assistant", result);
