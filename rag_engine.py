@@ -76,7 +76,9 @@ class EvidenceIndex:
         self._initialize_database()
 
     @contextmanager
-    def _connection(self) -> Generator[sqlite3.Connection]:
+    def _connection(
+        self,
+    ) -> Generator[sqlite3.Connection, None, None]:
         connection = sqlite3.connect(self.database_path)
         connection.row_factory = sqlite3.Row
         connection.execute("PRAGMA foreign_keys = ON")
