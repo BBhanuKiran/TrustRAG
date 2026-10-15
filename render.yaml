@@ -1,0 +1,25 @@
+services:
+  - type: web
+    name: trustrag
+    runtime: docker
+    plan: starter
+    healthCheckPath: /health
+    disk:
+      name: trustrag-data
+      mountPath: /var/data
+      sizeGB: 5
+    envVars:
+      - key: TRUSTRAG_ENV
+        value: production
+      - key: TRUSTRAG_SECRET_KEY
+        generateValue: true
+      - key: TRUSTRAG_LLM_API_KEY
+        sync: false
+      - key: TRUSTRAG_LLM_BASE_URL
+        value: https://api.openai.com/v1
+      - key: TRUSTRAG_LLM_MODEL
+        value: gpt-4o-mini
+      - key: TRUSTRAG_DATABASE_PATH
+        value: /var/data/trustrag.sqlite3
+      - key: TRUSTRAG_DATA_DIR
+        value: /var/data

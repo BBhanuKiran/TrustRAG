@@ -1,0 +1,10 @@
+fastapi
+uvicorn
+python-multipart
+pydantic
+httpx
+pypdf
+numpy
+sentence-transformers
+streamlit
+python-dotenv
