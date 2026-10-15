@@ -1,0 +1,26 @@
+[
+  {
+    "query": "What warning signs help identify a phishing email?",
+    "expected_source": "security_guide.pdf",
+    "expected_page": 1,
+    "answerable": true
+  },
+  {
+    "query": "What password security measures does the guide recommend?",
+    "expected_source": "security_guide.pdf",
+    "expected_page": 1,
+    "answerable": true
+  },
+  {
+    "query": "Should passwords be shared through email?",
+    "expected_source": "security_guide.pdf",
+    "expected_page": 1,
+    "answerable": true
+  },
+  {
+    "query": "Who won the 1986 World Cup?",
+    "expected_source": null,
+    "expected_page": null,
+    "answerable": false
+  }
+]
