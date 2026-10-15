@@ -8,3 +8,5 @@ numpy
 sentence-transformers
 streamlit
 python-dotenv
+Pillow
+pytesseract

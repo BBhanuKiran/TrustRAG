@@ -1,6 +1,7 @@
 import io
 import os
 import sqlite3
+import subprocess
 import threading
 from collections.abc import Callable, Generator, Sequence
 from contextlib import contextmanager
@@ -20,6 +21,8 @@ CHUNK_OVERLAP = 30
 MAX_INDEXED_PAGES = 500
 MAX_INDEXED_CHUNKS_PER_USER = 5000
 MAX_INDEXED_DOCUMENTS_PER_USER = 100
+MAX_SOURCE_TEXT_CHARACTERS = 1_000_000
+MAX_IMAGE_PIXELS = 25_000_000
 
 
 class InvalidDocumentError(ValueError):
@@ -36,7 +39,7 @@ class EmbeddingModelError(RuntimeError):
 
 def chunk_page_text(
     source: str,
-    page: int,
+    page: int | None,
     text: str,
     chunk_size: int = CHUNK_SIZE,
     overlap: int = CHUNK_OVERLAP,
@@ -102,14 +105,16 @@ class EvidenceIndex:
                     user_id TEXT NOT NULL DEFAULT 'local',
                     uploaded_at TEXT NOT NULL,
                     page_count INTEGER NOT NULL,
-                    chunk_count INTEGER NOT NULL
+                    chunk_count INTEGER NOT NULL,
+                    source_type TEXT NOT NULL DEFAULT 'pdf',
+                    source_url TEXT
                 );
 
                 CREATE TABLE IF NOT EXISTS chunks (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     document_id TEXT NOT NULL REFERENCES documents(id)
                         ON DELETE CASCADE,
-                    page INTEGER NOT NULL,
+                    page INTEGER,
                     text TEXT NOT NULL,
                     embedding BLOB NOT NULL
                 );
@@ -124,6 +129,38 @@ class EvidenceIndex:
             if "user_id" not in document_columns:
                 connection.execute(
                     "ALTER TABLE documents ADD COLUMN user_id TEXT NOT NULL DEFAULT 'local'"
+                )
+            if "source_type" not in document_columns:
+                connection.execute(
+                    "ALTER TABLE documents ADD COLUMN source_type TEXT NOT NULL DEFAULT 'pdf'"
+                )
+            if "source_url" not in document_columns:
+                connection.execute(
+                    "ALTER TABLE documents ADD COLUMN source_url TEXT"
+                )
+            page_column = next(
+                column
+                for column in connection.execute(
+                    "PRAGMA table_info(chunks)"
+                ).fetchall()
+                if column["name"] == "page"
+            )
+            if page_column["notnull"]:
+                connection.executescript(
+                    """
+                    CREATE TABLE chunks_new (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        document_id TEXT NOT NULL REFERENCES documents(id)
+                            ON DELETE CASCADE,
+                        page INTEGER,
+                        text TEXT NOT NULL,
+                        embedding BLOB NOT NULL
+                    );
+                    INSERT INTO chunks_new (id, document_id, page, text, embedding)
+                        SELECT id, document_id, page, text, embedding FROM chunks;
+                    DROP TABLE chunks;
+                    ALTER TABLE chunks_new RENAME TO chunks;
+                    """
                 )
             connection.execute(
                 "CREATE INDEX IF NOT EXISTS idx_documents_user_id ON documents(user_id)"
@@ -213,6 +250,9 @@ class EvidenceIndex:
         filename: str,
         content: bytes,
         user_id: str = "local",
+        *,
+        source_type: str = "pdf",
+        source_url: str | None = None,
     ) -> dict[str, object]:
         pages, page_count = self._extract_pages(content)
         if page_count > MAX_INDEXED_PAGES:
@@ -228,11 +268,115 @@ class EvidenceIndex:
         if not chunks:
             raise InvalidDocumentError(
                 "No searchable text was found in this PDF. "
-                "Scanned PDFs need OCR, which is not supported yet."
+                "Scanned PDFs need OCR before upload."
             )
+        return self._store_source(
+            filename,
+            chunks,
+            user_id,
+            source_type=source_type,
+            page_count=page_count,
+            source_url=source_url,
+        )
+
+    def add_text(
+        self,
+        filename: str,
+        text: str,
+        user_id: str = "local",
+        *,
+        source_type: str = "text",
+        source_url: str | None = None,
+    ) -> dict[str, object]:
+        if not text.strip():
+            raise InvalidDocumentError("No searchable text was found.")
+        if len(text) > MAX_SOURCE_TEXT_CHARACTERS:
+            raise DocumentLimitError(
+                "Text source exceeds the 1 MB character limit."
+            )
+        chunks = chunk_page_text(filename, None, text)
+        return self._store_source(
+            filename,
+            chunks,
+            user_id,
+            source_type=source_type,
+            source_url=source_url,
+        )
+
+    def add_image(
+        self,
+        filename: str,
+        content: bytes,
+        user_id: str = "local",
+        *,
+        source_type: str = "image",
+        source_url: str | None = None,
+    ) -> dict[str, object]:
+        if not content:
+            raise InvalidDocumentError("The uploaded image is empty.")
+        try:
+            from PIL import Image, UnidentifiedImageError
+            import pytesseract
+        except ImportError as error:
+            raise EmbeddingModelError(
+                "Image OCR dependencies are unavailable. Install the project "
+                "requirements and Tesseract OCR."
+            ) from error
+
+        try:
+            with Image.open(io.BytesIO(content)) as image:
+                if image.width * image.height > MAX_IMAGE_PIXELS:
+                    raise DocumentLimitError(
+                        "Image exceeds the 25-megapixel limit."
+                    )
+                image.verify()
+            with Image.open(io.BytesIO(content)) as image:
+                text = pytesseract.image_to_string(image, timeout=30).strip()
+        except DocumentLimitError:
+            raise
+        except Image.DecompressionBombError as error:
+            raise DocumentLimitError(
+                "Image exceeds the 25-megapixel limit."
+            ) from error
+        except pytesseract.TesseractNotFoundError as error:
+            raise EmbeddingModelError(
+                "Tesseract OCR is not installed or is missing from PATH. "
+                "Install Tesseract, restart TrustRAG, and try again."
+            ) from error
+        except (UnidentifiedImageError, OSError, ValueError) as error:
+            raise InvalidDocumentError(
+                "The uploaded image is invalid or could not be read."
+            ) from error
+        except (RuntimeError, subprocess.TimeoutExpired) as error:
+            raise InvalidDocumentError(
+                "Image OCR timed out or could not read the image."
+            ) from error
+
+        if not text:
+            raise InvalidDocumentError(
+                "No readable text was detected in this image."
+            )
+        return self.add_text(
+            filename,
+            text,
+            user_id,
+            source_type=source_type,
+            source_url=source_url,
+        )
+
+    def _store_source(
+        self,
+        filename: str,
+        chunks: list[dict[str, Any]],
+        user_id: str,
+        *,
+        source_type: str,
+        page_count: int = 0,
+        source_url: str | None = None,
+    ) -> dict[str, object]:
         if len(chunks) > MAX_INDEXED_CHUNKS_PER_USER:
             raise DocumentLimitError(
-                f"PDF exceeds the {MAX_INDEXED_CHUNKS_PER_USER}-passage limit."
+                f"Source exceeds the {MAX_INDEXED_CHUNKS_PER_USER}-passage limit."
             )
 
         vectors = self._encode([chunk["text"] for chunk in chunks])
@@ -265,9 +409,10 @@ class EvidenceIndex:
             connection.execute(
                 """
                 INSERT INTO documents (
-                    id, filename, user_id, uploaded_at, page_count, chunk_count
+                    id, filename, user_id, uploaded_at, page_count, chunk_count,
+                    source_type, source_url
                 )
-                VALUES (?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     document_id,
@@ -276,6 +421,8 @@ class EvidenceIndex:
                     uploaded_at,
                     page_count,
                     len(chunks),
+                    source_type,
+                    source_url,
                 ),
             )
             connection.executemany(
@@ -300,13 +447,16 @@ class EvidenceIndex:
             "page_count": page_count,
             "chunk_count": len(chunks),
             "uploaded_at": uploaded_at,
+            "source_type": source_type,
+            "source_url": source_url,
         }
 
     def list_documents(self, user_id: str = "local") -> list[dict[str, object]]:
         with self._connection() as connection:
             documents = connection.execute(
                 """
-                SELECT id, filename, uploaded_at, page_count, chunk_count
+                SELECT id, filename, uploaded_at, page_count, chunk_count,
+                    source_type, source_url
                 FROM documents WHERE user_id = ?
                 ORDER BY uploaded_at DESC
                 """,
@@ -346,7 +496,8 @@ class EvidenceIndex:
         with self._connection() as connection:
             chunks = connection.execute(
                 """
-                SELECT documents.filename, chunks.page, chunks.text, chunks.embedding
+                SELECT documents.filename, documents.source_url, chunks.page,
+                    chunks.text, chunks.embedding
                 FROM chunks
                 JOIN documents ON documents.id = chunks.document_id
                 WHERE documents.user_id = ?
@@ -385,9 +536,43 @@ class EvidenceIndex:
             chunk = chunks[index]
             results.append({
                 "source": chunk["filename"],
+                "url": chunk["source_url"],
                 "page": chunk["page"],
                 "text": chunk["text"],
                 "score": float(scores[index]),
             })
 
         return results
+
+    def rank_sources(
+        self,
+        query: str,
+        sources: Sequence[dict[str, object]],
+        top_k: int = 3,
+    ) -> list[dict[str, object]]:
+        if top_k < 1:
+            raise ValueError("top_k must be at least 1.")
+        candidates = [
+            source
+            for source in sources
+            if isinstance(source.get("text"), str) and source["text"].strip()
+        ]
+        if not query.strip() or not candidates:
+            return []
+
+        vectors = self._encode([
+            query,
+            *(str(source["text"]) for source in candidates),
+        ])
+        scores = vectors[1:] @ vectors[0]
+        indices = sorted(
+            range(len(candidates)),
+            key=lambda index: (-float(scores[index]), index),
+        )[:top_k]
+        return [
+            {
+                **candidates[index],
+                "score": float(scores[index]),
+            }
+            for index in indices
+        ]

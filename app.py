@@ -3,6 +3,7 @@ import os
 import re
 from pathlib import Path
 from typing import Annotated
+from urllib.parse import urlsplit
 
 from fastapi import Depends, FastAPI, File, HTTPException, Request, Response, UploadFile
 from fastapi.responses import FileResponse
@@ -33,6 +34,7 @@ from rag_engine import (
     InvalidDocumentError,
 )
 from support import find_support_answer
+from web_sources import WebSourceError, fetch_public_url, html_to_text, search_recent_web
 
 
 ROOT_DIR = Path(__file__).parent
@@ -48,7 +50,8 @@ MAX_UPLOAD_BYTES = 20 * 1024 * 1024
 app = FastAPI(
     title="TrustRAG",
     description=(
-        "Private, account-isolated PDF research with evidence and page citations."
+        "Private, account-isolated research across files, links, text, images, "
+        "and current web search, with evidence citations."
     ),
     version="1.0.0",
 )
@@ -169,6 +172,16 @@ class AskRequest(QuestionRequest):
         ge=0,
         le=1,
     )
+    include_web: bool = True
+
+
+class SourceTextRequest(BaseModel):
+    title: str = Field(default="Pasted notes", min_length=1, max_length=200)
+    text: str = Field(min_length=1, max_length=1_000_000)
+
+
+class SourceURLRequest(BaseModel):
+    url: str = Field(min_length=8, max_length=2048)
 
 
 class SupportRequest(BaseModel):
@@ -344,40 +357,60 @@ def list_answer_configuration(user: CurrentUser) -> dict[str, object]:
 
 @app.post("/documents", status_code=201)
 async def upload_document(
-    file: Annotated[UploadFile, File(description="A PDF document to index")],
+    file: Annotated[
+        UploadFile,
+        File(description="A PDF, text file, or image source to index"),
+    ],
     user: CurrentUser,
 ) -> dict[str, object]:
     _check_user_rate_limit(user["id"], "upload")
     try:
-        if Path(file.filename or "").suffix.lower() != ".pdf":
+        filename = Path(file.filename or "").name
+        suffix = Path(filename).suffix.lower()
+        supported_text = {".txt", ".md", ".csv", ".html", ".htm"}
+        supported_images = {".png", ".jpg", ".jpeg", ".webp", ".tif", ".tiff"}
+        if suffix != ".pdf" and suffix not in supported_text | supported_images:
             raise HTTPException(
                 status_code=415,
-                detail="Only PDF files are supported.",
+                detail=(
+                    "Supported files are PDFs, TXT, Markdown, CSV, HTML, PNG, "
+                    "JPEG, WEBP, and TIFF images."
+                ),
             )
 
         content = await file.read(MAX_UPLOAD_BYTES + 1)
         if len(content) > MAX_UPLOAD_BYTES:
             raise HTTPException(
                 status_code=413,
-                detail=f"PDF exceeds the {MAX_UPLOAD_BYTES // (1024 * 1024)} MB limit.",
-            )
-
-        if (
-            get_index().count_documents(user["id"])
-            >= MAX_INDEXED_DOCUMENTS_PER_USER
-        ):
-            raise HTTPException(
-                status_code=413,
                 detail=(
-                    "This account has reached the "
-                    f"{MAX_INDEXED_DOCUMENTS_PER_USER}-document limit."
+                    "File exceeds the "
+                    f"{MAX_UPLOAD_BYTES // (1024 * 1024)} MB limit."
                 ),
             )
 
+        _check_document_capacity(user["id"])
+        if suffix == ".pdf":
+            return await run_in_threadpool(
+                get_index().add_pdf,
+                filename,
+                content,
+                user["id"],
+            )
+        if suffix in supported_images:
+            return await run_in_threadpool(
+                get_index().add_image,
+                filename,
+                content,
+                user["id"],
+            )
+        text = content.decode("utf-8-sig", errors="replace")
+        if suffix in {".html", ".htm"}:
+            text, title = html_to_text(text)
+            filename = title[:200] or filename
         return await run_in_threadpool(
-            get_index().add_pdf,
-            Path(file.filename or "document.pdf").name,
-            content,
+            get_index().add_text,
+            filename,
+            text,
             user["id"],
         )
     except InvalidDocumentError as error:
@@ -388,6 +421,106 @@ async def upload_document(
         raise HTTPException(status_code=503, detail=str(error)) from error
     finally:
         await file.close()
+
+
+@app.post("/sources/text", status_code=201)
+def add_pasted_text(
+    request: SourceTextRequest,
+    user: CurrentUser,
+) -> dict[str, object]:
+    _check_user_rate_limit(user["id"], "upload")
+    _check_document_capacity(user["id"])
+    try:
+        return get_index().add_text(
+            request.title.strip() or "Pasted notes",
+            request.text,
+            user["id"],
+        )
+    except DocumentLimitError as error:
+        raise HTTPException(status_code=413, detail=str(error)) from error
+    except InvalidDocumentError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+    except EmbeddingModelError as error:
+        raise HTTPException(status_code=503, detail=str(error)) from error
+
+
+@app.post("/sources/url", status_code=201)
+def add_url_source(
+    request: SourceURLRequest,
+    user: CurrentUser,
+) -> dict[str, object]:
+    _check_user_rate_limit(user["id"], "upload")
+    _check_document_capacity(user["id"])
+    try:
+        fetched = fetch_public_url(request.url)
+        content = fetched.content
+        content_type = fetched.content_type
+        source_url = fetched.final_url
+        path_name = Path(urlsplit(source_url).path).name
+        if content_type == "application/pdf":
+            filename = path_name or "linked-document.pdf"
+            return get_index().add_pdf(
+                filename,
+                content,
+                user["id"],
+                source_type="link",
+                source_url=source_url,
+            )
+        if content_type in {"text/html", "application/xhtml+xml"}:
+            html = content.decode(fetched.encoding, errors="replace")
+            text, title = html_to_text(html)
+            filename = title[:200] or path_name or urlsplit(source_url).hostname or "Web page"
+            return get_index().add_text(
+                filename,
+                text,
+                user["id"],
+                source_type="link",
+                source_url=source_url,
+            )
+        if content_type.startswith("text/"):
+            filename = path_name or "linked-text.txt"
+            text = content.decode(fetched.encoding, errors="replace")
+            return get_index().add_text(
+                filename,
+                text,
+                user["id"],
+                source_type="link",
+                source_url=source_url,
+            )
+        if content_type.startswith("image/"):
+            filename = path_name or f"linked-image.{content_type.split('/', 1)[1]}"
+            return get_index().add_image(
+                filename,
+                content,
+                user["id"],
+                source_type="link",
+                source_url=source_url,
+            )
+        raise HTTPException(
+            status_code=415,
+            detail=(
+                "That link is not a supported PDF, web page, text file, or image."
+            ),
+        )
+    except WebSourceError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+    except InvalidDocumentError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+    except DocumentLimitError as error:
+        raise HTTPException(status_code=413, detail=str(error)) from error
+    except EmbeddingModelError as error:
+        raise HTTPException(status_code=503, detail=str(error)) from error
+
+
+def _check_document_capacity(user_id: str) -> None:
+    if get_index().count_documents(user_id) >= MAX_INDEXED_DOCUMENTS_PER_USER:
+        raise HTTPException(
+            status_code=413,
+            detail=(
+                "This account has reached the "
+                f"{MAX_INDEXED_DOCUMENTS_PER_USER}-source limit."
+            ),
+        )
 
 
 @app.get("/documents")
@@ -433,6 +566,16 @@ def ask_question(
             top_k=request.top_k,
             user_id=user["id"],
         )
+        web_result_count = 0
+        if request.include_web:
+            web_results = search_recent_web(request.query, limit=3)
+            ranked_web_results = get_index().rank_sources(
+                request.query,
+                web_results,
+                top_k=3,
+            )
+            web_result_count = len(ranked_web_results)
+            evidence.extend(ranked_web_results)
         if (
             os.getenv("TRUSTRAG_LLM_API_KEY")
             or os.getenv("TRUSTRAG_ENV", "development").casefold() == "production"
@@ -450,6 +593,13 @@ def ask_question(
             )
     except LocalModelError as error:
         raise HTTPException(status_code=503, detail=str(error)) from error
+    except WebSourceError as error:
+        raise HTTPException(status_code=503, detail=str(error)) from error
     except EmbeddingModelError as error:
         raise HTTPException(status_code=503, detail=str(error)) from error
-    return {"query": request.query, **result}
+    return {
+        "query": request.query,
+        "web_search_included": request.include_web,
+        "web_sources_count": web_result_count,
+        **result,
+    }

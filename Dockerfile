@@ -11,7 +11,10 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 WORKDIR /app
 
 COPY requirements.txt .
-RUN python -m pip install --no-cache-dir -r requirements.txt \
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends tesseract-ocr \
+    && rm -rf /var/lib/apt/lists/* \
+    && python -m pip install --no-cache-dir -r requirements.txt \
     && groupadd --system app \
     && useradd --system --gid app --home-dir /app app \
     && mkdir -p /var/data/huggingface \

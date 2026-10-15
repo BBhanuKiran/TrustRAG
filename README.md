@@ -1,9 +1,9 @@
 # TrustRAG
 
 **Research with receipts.** TrustRAG is a full-stack, account-isolated research
-assistant for searchable PDFs. It retrieves relevant passages, answers from
-those passages, shows source pages, and abstains when the available evidence is
-too weak.
+assistant for PDFs, text, images, web pages, and current web search. It retrieves
+relevant passages, answers from that evidence, links back to sources, and
+abstains when the available evidence is too weak.
 
 ## Product
 
@@ -11,9 +11,11 @@ TrustRAG helps people inspect policies, handbooks, technical manuals, reports,
 and research papers without treating an AI response as unquestionable truth.
 Its central workflow is:
 
-1. Create an account and upload a text-searchable PDF.
-2. Ask a focused question about your own library.
-3. Inspect the answer's evidence cards, source filename, and page.
+1. Create an account and add PDFs, text files, images, pasted notes, or public
+   web links to your private library.
+2. Ask a focused question. Fresh web search is enabled by default and can be
+   switched off for a private-library-only answer.
+3. Inspect the answer's evidence cards, source links, and PDF page references.
 4. Confirm consequential claims against the original source.
 
 The website also includes a practical user manual, privacy and limitations
@@ -29,6 +31,7 @@ Requirements:
 - Python 3.11 or newer.
 - Ollama installed separately for local model answers.
 - Internet access the first time the embedding model is downloaded.
+- Tesseract OCR installed and on `PATH` to index images (optional).
 
 ### 1. Start the website
 
@@ -50,19 +53,23 @@ Select **Create your private workspace**. Accounts use a normalized email
 address and a password of at least 12 characters. This portfolio build does not
 include password-reset email; keep your password safe.
 
-### 3. Index a source
+### 3. Add sources
 
-Go to **My library**, choose one or more text-based PDF files, and select
-**Upload and index**. Limits are 20 MB and 500 pages per PDF, 100 PDFs per
-account, and 5,000 indexed passages per account. Scanned/image-only PDFs need
-OCR before upload.
+Go to **My library** to upload PDF, TXT, Markdown, CSV, HTML, or PNG/JPEG/WEBP/
+TIFF files; paste text; or fetch a public URL. Limits are 20 MB per file/link,
+500 pages per PDF, 100 sources per account, and 5,000 indexed passages per
+account. Image OCR requires Tesseract to be installed locally; the Docker image
+includes it. OCR reads visible text, not the visual meaning of charts or
+diagrams.
 
 ### 4. Research and verify
 
-Ask a specific question in **Workspace**. Open the returned evidence cards to
-inspect the exact retrieved text, source name, page, and relevance score. Use
-**Export this conversation** to download a Markdown transcript. Remove
-documents from **My library** when they are no longer needed.
+Ask a specific question in **Workspace**. Current web search is included by
+default; uncheck **Include fresh web results** to search only your account's
+library. Open the returned evidence cards to inspect retrieved text, source
+links, PDF pages, and relevance scores. Use **Export this conversation** to
+download a Markdown transcript. Remove sources from **My library** when they
+are no longer needed.
 
 The **User manual** explains the purpose, quick start, answer pipeline, data
 handling, accuracy limitations, and troubleshooting. **Help chat** answers
@@ -93,8 +100,10 @@ committed files, or a public GitHub repository:
 
 Copy [`.env.example`](./.env.example) to `.env` for local configuration.
 `.env` is ignored by Git. A hosted provider may process the question and
-retrieved PDF passages; review its data-retention terms and only upload content
-you are authorized to share.
+retrieved source passages; current web search sends the question to DuckDuckGo.
+Review provider retention terms and only add content you are authorized to
+share. Web search depends on DuckDuckGo availability and its search index; it
+does not guarantee the newest or complete information.
 
 ## Account separation and operational safeguards
 
@@ -103,11 +112,12 @@ you are authorized to share.
   and expire after seven days.
 - Production cookies are marked secure. Production startup fails without a
   sufficiently long `TRUSTRAG_SECRET_KEY`.
-- Documents, passage search, deletion, and answers are scoped to the
+- Private files, passage search, deletion, and answers are scoped to the
   authenticated owner in the SQLite queries.
 - Users can delete their account, its active sessions, and indexed documents.
 - Registration/login and per-account upload/answer requests are rate-limited.
-- PDFs have per-file size/page limits and per-account document/passage limits.
+- Sources have per-file size and per-account source/passage limits; PDF pages
+  and image pixel counts are capped.
 - HTTP security headers restrict framing, browser capabilities, and script
   sources. Authenticated/private API responses are not cacheable.
 - The app has a root site, robots rules, server-side SEO metadata, OpenAPI docs,
@@ -152,15 +162,19 @@ The website API is same-origin. Open `/docs` for interactive API documentation.
 | `POST` | `/api/auth/logout` | Revoke the active session. |
 | `POST` | `/api/support` | Search the curated user manual. |
 | `GET` | `/documents` | List the signed-in user's documents. |
-| `POST` | `/documents` | Upload and index a PDF. |
+| `POST` | `/documents` | Upload and index a PDF, text file, or image. |
+| `POST` | `/sources/text` | Save and index pasted text. |
+| `POST` | `/sources/url` | Fetch and index a public web page, PDF, text file, or image. |
 | `DELETE` | `/documents/{document_id}` | Delete an owned document. |
-| `POST` | `/search` | Search only owned PDF passages. |
-| `POST` | `/ask` | Generate an evidence-grounded answer or abstain. |
+| `POST` | `/search` | Search only the signed-in user's indexed sources. |
+| `POST` | `/ask` | Search private sources and (by default) fresh web results, then answer or abstain. |
 
 Private endpoints require the HTTP-only session cookie. `/ask` sends relevant
 passages to the server-configured provider and validates citation identifiers
-against retrieved evidence. That validation does not prove that a cited source
-entails every generated statement. No “100% accurate” guarantee is made.
+against retrieved evidence. Web search is done through DuckDuckGo and sends
+the query to that service. Citation validation does not prove that a cited
+source entails every generated statement. No “100% accurate” guarantee is
+made.
 
 ## Tests and checks
 

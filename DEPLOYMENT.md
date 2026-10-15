@@ -47,6 +47,11 @@ locally; this guide covers deploying it as a hosted service.
   available to the server.
 - The provider receives questions and retrieved text excerpts. The app sends
   no key to the browser; public deployment still has third-party processing.
+- Fresh web search uses DuckDuckGo without an API key and sends each enabled
+  research question to its public search service. Web search can be disabled
+  per question; no search provider can guarantee the newest or complete results.
+- The Docker image installs Tesseract for local image-text OCR. OCR extracts
+  readable text only; it does not interpret charts or visual layouts.
 - The in-memory rate limiter is a basic single-process safeguard, not a
   substitute for provider-side quotas, edge rate limits, monitoring, or a
   distributed abuse-control service.

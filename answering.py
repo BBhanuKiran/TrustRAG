@@ -13,13 +13,33 @@ OLLAMA_KEEP_ALIVE = "10m"
 MAX_ANSWER_TOKENS = 160
 DEFAULT_HOSTED_MODEL = "gpt-4o-mini"
 DEFAULT_HOSTED_BASE_URL = "https://api.openai.com/v1"
-ABSTENTION = "I couldn't find sufficient evidence in the indexed documents."
+ABSTENTION = "I couldn't find sufficient evidence in your sources or the latest web results."
 
 _CITATION_PATTERN = re.compile(r"\[(E\d+)\]")
 
 
 class LocalModelError(RuntimeError):
     pass
+
+
+def _evidence_source_label(item: Mapping[str, object]) -> str:
+    source = str(item.get("source", "source"))
+    page = item.get("page")
+    if isinstance(page, int):
+        return f"{source} (page {page})"
+    url = item.get("url")
+    return f"{source} (URL: {url})" if url else source
+
+
+def _citation(citation_id: str, item: Mapping[str, object]) -> dict[str, object]:
+    result: dict[str, object] = {
+        "id": citation_id,
+        "source": item["source"],
+        "page": item.get("page"),
+    }
+    if item.get("url"):
+        result["url"] = item["url"]
+    return result
 
 
 def _verified_sentences(
@@ -107,7 +127,7 @@ def answer_with_local_model(
         for index, item in enumerate(supported_evidence, start=1)
     }
     evidence_text = "\n\n".join(
-        f"[{citation_id}] {item['source']} (page {item['page']})\n{item['text']}"
+        f"[{citation_id}] {_evidence_source_label(item)}\n{item['text']}"
         for citation_id, item in evidence_by_id.items()
     )
 
@@ -185,11 +205,7 @@ def answer_with_local_model(
         )
 
     citations = [
-        {
-            "id": citation_id,
-            "source": evidence_by_id[citation_id]["source"],
-            "page": evidence_by_id[citation_id]["page"],
-        }
+        _citation(citation_id, evidence_by_id[citation_id])
         for citation_id in cited_ids
     ]
     return {
@@ -234,7 +250,7 @@ def answer_with_hosted_model(
         for index, item in enumerate(supported_evidence, start=1)
     }
     evidence_text = "\n\n".join(
-        f"[{citation_id}] {item['source']} (page {item['page']})\n{item['text']}"
+        f"[{citation_id}] {_evidence_source_label(item)}\n{item['text']}"
         for citation_id, item in evidence_by_id.items()
     )
     prompt = (
@@ -322,11 +338,7 @@ def answer_with_hosted_model(
             "\n\nUncited or unverifiable statements were omitted."
         )
     citations = [
-        {
-            "id": citation_id,
-            "source": evidence_by_id[citation_id]["source"],
-            "page": evidence_by_id[citation_id]["page"],
-        }
+        _citation(citation_id, evidence_by_id[citation_id])
         for citation_id in cited_ids
     ]
     return {
