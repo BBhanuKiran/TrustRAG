@@ -1,0 +1,7 @@
+User-agent: *
+Allow: /
+Disallow: /api/
+Disallow: /documents
+Disallow: /search
+Disallow: /ask
+Disallow: /models

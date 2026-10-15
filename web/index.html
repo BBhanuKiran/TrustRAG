@@ -1,0 +1,180 @@
+<!doctype html>
+<html lang="en" data-theme="light">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#f6f8fc">
+  <meta name="description" content="TrustRAG is an evidence-first research assistant. Ask questions about PDFs, inspect page-level citations, and keep document libraries private to your account.">
+  <meta name="robots" content="index,follow">
+  <title>TrustRAG — Research with receipts</title>
+  <link rel="icon" href="/assets/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/assets/styles.css">
+  <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "WebApplication",
+      "name": "TrustRAG",
+      "applicationCategory": "ResearchApplication",
+      "description": "An evidence-first PDF research assistant with inspectable, page-level citations."
+    }
+  </script>
+  <script src="/assets/app.js" defer></script>
+</head>
+<body>
+  <a class="skip-link" href="#main-content">Skip to main content</a>
+  <header class="topbar">
+    <a class="brand" href="/" aria-label="TrustRAG home">
+      <span class="brand-mark" aria-hidden="true">T</span>
+      <span>Trust<span class="brand-accent">RAG</span><small>RESEARCH WITH RECEIPTS</small></span>
+    </a>
+    <nav class="main-nav" aria-label="Main navigation">
+      <button class="nav-link active" data-view="workspace">Workspace</button>
+      <button class="nav-link" data-view="documents">My library</button>
+      <button class="nav-link" data-view="manual">User manual</button>
+      <button class="nav-link" data-view="about">About</button>
+      <button class="nav-link" data-view="support">Help chat</button>
+    </nav>
+    <div class="top-actions">
+      <button class="icon-button" id="theme-toggle" type="button" aria-label="Switch to dark theme" title="Toggle appearance">◐</button>
+      <span class="user-email" id="user-email" hidden></span>
+      <button class="button button-danger-quiet" id="delete-account" type="button" hidden>Delete account</button>
+      <button class="button button-quiet" id="auth-open" type="button">Sign in</button>
+      <button class="button button-quiet" id="logout-button" type="button" hidden>Sign out</button>
+    </div>
+  </header>
+
+  <main id="main-content" class="page-shell">
+    <div id="global-notice" class="notice" role="status" aria-live="polite" hidden></div>
+    <section class="view active" id="workspace-view" aria-labelledby="workspace-title">
+      <div class="hero">
+        <div class="hero-copy">
+          <div class="eyebrow"><span class="status-dot"></span> PRIVATE RESEARCH · VERIFIABLE SOURCES</div>
+          <h1 id="workspace-title">Research with<br><span class="gradient-text">receipts.</span></h1>
+          <p class="hero-intro">Ask questions across your PDFs. Get concise answers grounded in your documents—with the source page and passage right there to inspect.</p>
+          <div class="hero-actions">
+            <button class="button button-primary" id="hero-signup" type="button">Create your private workspace <span aria-hidden="true">→</span></button>
+            <button class="button button-secondary" data-view="manual" type="button">Explore the user manual</button>
+          </div>
+          <p class="privacy-note"><span aria-hidden="true">◆</span> Each account has its own document library. No public sharing by default.</p>
+        </div>
+        <div class="hero-visual" aria-label="An illustrative evidence card showing a page citation">
+          <div class="orbit orbit-one"></div><div class="orbit orbit-two"></div>
+          <div class="visual-glow"></div>
+          <article class="floating-card">
+            <div class="card-kicker"><span class="sparkle">✦</span> GROUNDED ANSWER</div>
+            <p>“The policy recommends reviewing access regularly and documenting each change.”</p>
+            <div class="visual-source"><span class="source-icon">↗</span><span><b>operations-policy.pdf</b><small>Page 12 · Evidence E1</small></span><span class="verified">✓</span></div>
+          </article>
+          <div class="floating-chip chip-one"><span class="status-dot"></span> Source checked</div>
+          <div class="floating-chip chip-two">01 <span>clear citation</span></div>
+        </div>
+      </div>
+
+      <div class="trust-strip">
+        <div><span class="strip-icon">01</span><span><b>Evidence first</b><small>Answers use your indexed sources</small></span></div>
+        <div><span class="strip-icon">02</span><span><b>Page-level receipts</b><small>Open the exact supporting passage</small></span></div>
+        <div><span class="strip-icon">03</span><span><b>Honest when uncertain</b><small>Weak evidence means an abstention</small></span></div>
+      </div>
+
+      <div class="auth-card" id="auth-card" hidden>
+        <div>
+          <span class="eyebrow">YOUR PRIVATE WORKSPACE</span>
+          <h2 id="auth-title">Sign in to start researching</h2>
+          <p id="auth-description">Your account keeps your documents separate from other people's libraries.</p>
+        </div>
+        <form id="auth-form" class="auth-form">
+          <label>Email address<input id="auth-email" name="email" type="email" autocomplete="email" maxlength="254" required placeholder="you@example.com"></label>
+          <label>Password<input id="auth-password" name="password" type="password" autocomplete="current-password" minlength="12" maxlength="256" required placeholder="At least 12 characters"></label>
+          <button class="button button-primary" id="auth-submit" type="submit">Sign in securely</button>
+          <button class="text-button" id="auth-mode-toggle" type="button">New to TrustRAG? Create an account</button>
+          <p class="form-feedback" id="auth-feedback" role="status" aria-live="polite"></p>
+        </form>
+      </div>
+
+      <div class="workspace-panel" id="workspace-panel" hidden>
+        <div class="section-heading">
+          <div><span class="eyebrow">YOUR RESEARCH DESK</span><h2>Ask your documents</h2><p>Every answer is limited to the evidence in your private library.</p></div>
+          <button class="button button-secondary" data-view="documents" type="button">Manage documents</button>
+        </div>
+        <div class="metric-row">
+          <div class="metric-card"><span>Documents indexed</span><b id="document-count">0</b></div>
+          <div class="metric-card"><span>Pages available</span><b id="page-count">0</b></div>
+          <div class="metric-card"><span>Answer service</span><b id="answer-service-status">Checking…</b></div>
+        </div>
+        <div class="research-layout">
+          <section class="chat-panel" aria-label="Document research chat">
+            <div class="chat-heading"><span class="assistant-avatar">T</span><span><b>TrustRAG Research</b><small>Grounded in your documents</small></span><span class="live-pill">PRIVATE</span></div>
+            <div id="research-messages" class="message-list" aria-live="polite">
+              <article class="message assistant-message"><div class="message-avatar">T</div><div class="message-body"><p>Welcome. Add a PDF to your library, then ask a specific question about what it says. I’ll show the source and page so you can check my work.</p><small>Evidence, not guesswork.</small></div></article>
+            </div>
+            <form id="question-form" class="composer">
+              <label class="visually-hidden" for="question-input">Ask a question about your documents</label>
+              <textarea id="question-input" rows="2" maxlength="2000" placeholder="Ask a question grounded in your PDFs…" required></textarea>
+              <div class="composer-bottom"><span>Important decisions? Verify the cited original page.</span><button class="button button-primary" type="submit">Ask <span aria-hidden="true">↑</span></button></div>
+            </form>
+          </section>
+          <aside class="side-panel">
+            <div class="side-panel-title"><span>✦</span><b>Try a research question</b></div>
+            <button class="suggestion" data-question="What are the main recommendations in this document?">Summarize the main recommendations <span>↗</span></button>
+            <button class="suggestion" data-question="What risks or warnings does this document mention?">Find risks and warnings <span>↗</span></button>
+            <button class="suggestion" data-question="Which page explains the key requirements?">Locate key requirements <span>↗</span></button>
+            <div class="side-note-card"><span>ⓘ</span><p>TrustRAG checks that citation IDs point to retrieved passages. It cannot guarantee that every generated claim is correct.</p></div>
+            <button class="text-button" id="export-chat" type="button">↓ Export this conversation</button>
+          </aside>
+        </div>
+      </div>
+      <div class="signed-out-hint" id="signed-out-hint"><span class="hint-icon">✧</span><div><b>Built for careful research</b><p>Create a free account to upload a document and open your private evidence workspace.</p></div><button class="button button-secondary" id="hint-signup" type="button">Create account</button></div>
+    </section>
+
+    <section class="view" id="documents-view" aria-labelledby="documents-title">
+      <div class="section-heading page-heading"><div><span class="eyebrow">YOUR PRIVATE SOURCE LIBRARY</span><h1 id="documents-title">Your documents</h1><p>Upload text-based PDFs. Search and answers are isolated to your account.</p></div><span class="count-badge" id="library-count">0 documents</span></div>
+      <div id="library-signin" class="empty-state" hidden><div class="empty-icon">◇</div><h2>Your library is private</h2><p>Sign in to upload and manage your own source documents.</p><button class="button button-primary" data-open-auth type="button">Sign in</button></div>
+      <div id="library-content" hidden>
+        <form id="upload-form" class="upload-zone">
+          <div class="upload-symbol">↑</div><div><h2>Add research PDFs</h2><p>Text-based PDF · up to 20 MB · 500 pages per file · up to 100 documents</p></div>
+          <label class="button button-secondary file-picker" for="pdf-files">Choose PDFs</label>
+          <input id="pdf-files" name="files" type="file" accept="application/pdf,.pdf" multiple hidden>
+          <div class="selected-files" id="selected-files">No files selected</div>
+          <button class="button button-primary" type="submit" id="upload-submit" disabled>Upload and index</button>
+          <p class="form-feedback" id="upload-feedback" role="status" aria-live="polite"></p>
+        </form>
+        <div class="library-toolbar"><div><h2>Indexed sources</h2><p>Only you can see the documents in this library.</p></div><label class="search-field"><span>⌕</span><input id="library-search" type="search" placeholder="Filter by filename" aria-label="Filter by filename"></label></div>
+        <div id="document-list" class="document-list"></div>
+        <div id="library-empty" class="empty-state compact" hidden><div class="empty-icon">▤</div><h3>No documents yet</h3><p>Upload your first searchable PDF to begin.</p></div>
+      </div>
+    </section>
+
+    <section class="view" id="manual-view" aria-labelledby="manual-title">
+      <div class="manual-hero"><span class="eyebrow">THE TRUSTRAG FIELD GUIDE</span><h1 id="manual-title">A clear guide to<br><span class="gradient-text">better evidence.</span></h1><p>What TrustRAG is for, how to use it, how answers are made, and what to do when something goes wrong.</p></div>
+      <div class="manual-grid">
+        <aside class="manual-index"><b>IN THIS GUIDE</b><a href="#manual-purpose">Purpose</a><a href="#manual-start">Quick start</a><a href="#manual-answers">How answers work</a><a href="#manual-privacy">Privacy</a><a href="#manual-limitations">Accuracy & limits</a><a href="#manual-troubleshooting">Troubleshooting</a></aside>
+        <article class="manual-content">
+          <section id="manual-purpose"><span class="manual-number">01</span><div><h2>What is TrustRAG for?</h2><p>TrustRAG is a research assistant for asking questions about your own PDF sources. It retrieves relevant passages, drafts a short answer from that evidence, and points you to the source page. It is designed to make checking an answer easier—not to replace reading, expert judgment, or reliable original sources.</p><div class="callout"><b>Good fit</b><p>Compare policies, locate a requirement in a manual, review a research paper, or find the exact passage behind a claim.</p></div></div></section>
+          <section id="manual-start"><span class="manual-number">02</span><div><h2>Quick start: from PDF to answer</h2><ol class="step-list"><li><b>Create an account</b><span>Use an email address and a strong password. Your library belongs to your account.</span></li><li><b>Upload a searchable PDF</b><span>Open My library and choose a text-based PDF under 20 MB and 500 pages, then select Upload and index. Each account can index up to 100 documents.</span></li><li><b>Ask a precise question</b><span>Open Workspace. Name a topic, requirement, or detail you want to find in your sources.</span></li><li><b>Inspect the evidence</b><span>Open the evidence cards. Check the quotation, document name, and page against the original PDF.</span></li><li><b>Remove documents when finished</b><span>Delete sources you no longer need from My library.</span></li></ol></div></section>
+          <section id="manual-answers"><span class="manual-number">03</span><div><h2>How TrustRAG creates an answer</h2><div class="process-row"><div><b>01 · Extract</b><p>Readable text is extracted from PDF pages.</p></div><div><b>02 · Retrieve</b><p>Semantic search finds the passages most relevant to your question.</p></div><div><b>03 · Draft</b><p>A configured answer model receives your question and those passages.</p></div><div><b>04 · Cite</b><p>TrustRAG keeps sentences with recognized evidence IDs and displays their source pages.</p></div></div><p>The hosted AI provider may process retrieved document passages to generate an answer. These passages are sent only when you submit a question, not when you merely browse the site or upload a PDF.</p></div></section>
+          <section id="manual-privacy"><span class="manual-number">04</span><div><h2>Privacy and your documents</h2><ul class="check-list"><li>Sign-in is required before document upload, search, and answering.</li><li>Every document query is filtered by the signed-in account.</li><li>The server stores extracted page text and vectors so your documents can be searched.</li><li>The configured hosted AI provider receives relevant passages when you request a generated answer.</li><li>Review the deployment's provider and privacy policy before uploading confidential or regulated records.</li><li>Use the library's Delete action to remove a document and its searchable passages.</li><li>Use Delete account in the header to permanently remove your account, sessions, and indexed documents.</li><li>Service limits: 20 MB per PDF, 500 pages per PDF, 100 PDFs per account, and 5,000 total passages per account.</li></ul></div></section>
+          <section id="manual-limitations"><span class="manual-number">05</span><div><h2>Accuracy, evidence, and honest limits</h2><div class="callout warning"><b>No AI system can promise 100% accuracy.</b><p>A citation proves that the cited passage was retrieved—not that it fully supports every claim. Models can misunderstand context, omit qualifications, or make mistakes. Inspect important claims in the original page and confirm them independently.</p></div><ul><li>TrustRAG can abstain when evidence is too weak; a result is not guaranteed for every question.</li><li>Scanned/image-only PDFs need OCR before they can be searched.</li><li>Conflicting passages are shown for your review; conflicts are not automatically resolved.</li><li>Account passwords cannot be reset automatically in this release. Store yours safely.</li><li>This is a portfolio application, not a regulated medical, legal, financial, or enterprise records service.</li></ul></div></section>
+          <section id="manual-troubleshooting"><span class="manual-number">06</span><div><h2>Troubleshooting</h2><details><summary>A PDF uploads but no text is found</summary><p>It may be scanned or image-only. Use OCR to create a text-searchable PDF and upload it again.</p></details><details><summary>The answer says evidence is insufficient</summary><p>Upload a source that directly addresses the question, confirm indexing completed, and ask a narrower question using the document's terminology.</p></details><details><summary>The answer takes a long time or fails</summary><p>The service can be busy, a provider may be unavailable, or the administrator may not have configured the answer service. Retry once; share the exact error with the site administrator.</p></details><details><summary>I cannot sign in</summary><p>Check the email address and password. Password reset email is not configured; if you lose your password, contact the site owner.</p></details><details><summary>A cited answer looks wrong</summary><p>Open its evidence card and compare it with the original cited page. Do not rely on an unsupported or misleading answer for a consequential decision.</p></details></div></section>
+        </article>
+      </div>
+    </section>
+
+    <section class="view" id="about-view" aria-labelledby="about-title">
+      <div class="manual-hero"><span class="eyebrow">WHY TRUSTRAG EXISTS</span><h1 id="about-title">Answers should<br><span class="gradient-text">show their work.</span></h1><p>TrustRAG helps people find and inspect evidence across long documents, with accountability built into the experience.</p></div>
+      <div class="about-grid"><article class="about-card about-purpose"><span class="eyebrow">THE PURPOSE</span><h2>Make document research more transparent.</h2><p>Traditional chatbots can return polished answers without making it easy to check their sources. TrustRAG puts the source passage, document name, page number, and limitations alongside the response.</p></article><article class="about-card"><span class="about-icon">⌕</span><h3>Semantic retrieval</h3><p>Find useful passages even when your question uses different wording than the PDF.</p></article><article class="about-card"><span class="about-icon">↗</span><h3>Traceable evidence</h3><p>Each citation points to a retrieved excerpt and the page it came from.</p></article><article class="about-card"><span class="about-icon">◇</span><h3>Account isolation</h3><p>Document listing, search, deletion, and answers are scoped to your signed-in account.</p></article><article class="about-card"><span class="about-icon">!</span><h3>Designed to abstain</h3><p>When evidence is weak, TrustRAG can say it cannot answer instead of pretending certainty.</p></article></div>
+      <div class="release-note"><span class="status-dot"></span><div><b>A transparent portfolio project</b><p>TrustRAG is an open-source portfolio build. It is not an independently audited security product, and AI answers are not guaranteed to be correct. Review the manual for privacy, setup, and limitations.</p></div><button class="button button-secondary" data-view="manual" type="button">Read the manual</button></div>
+    </section>
+
+    <section class="view" id="support-view" aria-labelledby="support-title">
+      <div class="section-heading page-heading"><div><span class="eyebrow">HELP CENTER</span><h1 id="support-title">Questions about TrustRAG?</h1><p>This support assistant searches a curated copy of the user manual. It does not use generative AI.</p></div><span class="count-badge">MANUAL-BASED</span></div>
+      <div class="support-layout"><section class="support-panel"><div class="chat-heading"><span class="assistant-avatar">?</span><span><b>TrustRAG Help</b><small>Answers from the user manual</small></span><span class="live-pill">GROUNDED</span></div><div id="support-messages" class="message-list" aria-live="polite"><article class="message assistant-message"><div class="message-avatar">?</div><div class="message-body"><p>Hi! Ask how to upload a PDF, understand citations, protect your documents, or troubleshoot an issue. If the manual doesn't cover it, I'll say so.</p><small>Answers include the manual section they came from.</small></div></article></div><form id="support-form" class="composer"><label class="visually-hidden" for="support-input">Ask a question about using TrustRAG</label><textarea id="support-input" rows="2" maxlength="500" placeholder="How do I upload and search a PDF?" required></textarea><div class="composer-bottom"><span>Manual answers only · no 100% accuracy claim</span><button class="button button-primary" type="submit">Ask help <span aria-hidden="true">↑</span></button></div></form></section><aside class="side-panel"><div class="side-panel-title"><span>✦</span><b>Popular help topics</b></div><button class="suggestion support-suggestion">How do I upload my first PDF?<span>↗</span></button><button class="suggestion support-suggestion">How can I check an answer's citation?<span>↗</span></button><button class="suggestion support-suggestion">Who can read my documents?<span>↗</span></button><button class="suggestion support-suggestion">Does TrustRAG guarantee accurate answers?<span>↗</span></button><div class="side-note-card"><span>ⓘ</span><p>This automated help provides guidance from the manual. For a security concern or account-access issue, contact the site administrator.</p></div></aside></div>
+    </section>
+
+    <section class="view" id="privacy-view" aria-labelledby="privacy-title">
+      <div class="manual-hero"><span class="eyebrow">CLEAR BY DESIGN</span><h1 id="privacy-title">Privacy & data use</h1><p>Know what is stored, what is sent for answer generation, and how to remove your sources.</p></div>
+      <div class="privacy-grid"><article class="about-card"><h2>Account library</h2><p>Uploaded documents are extracted and indexed on the TrustRAG server. Account scoping is applied to read, search, ask, and delete operations. A hosting administrator can access server infrastructure.</p></article><article class="about-card"><h2>Answer generation</h2><p>When you submit a question, TrustRAG sends your question and retrieved passages to the administrator-configured AI provider. Read that provider's privacy/retention terms before uploading sensitive content.</p></article><article class="about-card"><h2>Deletion</h2><p>Delete an indexed source in My library to remove its stored passages and vectors. Delete account in the header to remove the account, sessions, and its documents. Backups and provider retention policies depend on the deployment and provider.</p></article><article class="about-card"><h2>Your responsibility</h2><p>Upload only materials you are authorized to process. Do not upload secrets, regulated data, or sensitive personal records unless the site operator has explicitly approved that use.</p></article></div>
+    </section>
+  </main>
+  <footer class="site-footer"><a class="brand footer-brand" href="/"><span class="brand-mark" aria-hidden="true">T</span><span>Trust<span class="brand-accent">RAG</span><small>RESEARCH WITH RECEIPTS</small></span></a><p>Evidence-first research for documents you can inspect.</p><div><button class="footer-link" data-view="manual" type="button">User manual</button><button class="footer-link" data-view="privacy" type="button">Privacy & data use</button><span>Made for careful research · Verify important claims</span></div></footer>
+</body>
+</html>
