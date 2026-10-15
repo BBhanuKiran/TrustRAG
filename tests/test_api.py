@@ -12,6 +12,7 @@ from app import app
 from auth import AuthStore, SESSION_COOKIE_NAME
 from rag_engine import EvidenceIndex
 from answering import ABSTENTION, LocalModelError
+from web_sources import FetchedSource
 
 
 def fake_encoder(texts):
@@ -68,6 +69,9 @@ class TestTrustRagApi(unittest.TestCase):
         self.auth_patch = patch("app.get_auth_store", return_value=self.auth)
         self.auth_patch.start()
         self.addCleanup(self.auth_patch.stop)
+        self.web_search_patch = patch("app.search_recent_web", return_value=[])
+        self.web_search_patch.start()
+        self.addCleanup(self.web_search_patch.stop)
         self.addCleanup(self.temp_dir.cleanup)
 
     async def _async_request(self, method, path, **kwargs):
@@ -188,11 +192,111 @@ class TestTrustRagApi(unittest.TestCase):
         response = self.request(
             "POST",
             "/documents",
-            files={"file": ("notes.txt", b"not a PDF", "text/plain")},
+            files={"file": ("program.bin", b"not a supported source", "application/octet-stream")},
         )
 
         self.assertEqual(response.status_code, 415)
-        self.assertEqual(response.json()["detail"], "Only PDF files are supported.")
+        self.assertIn("Supported files", response.json()["detail"])
+
+    def test_upload_and_search_supports_text_files(self):
+        response = self.request(
+            "POST",
+            "/documents",
+            files={
+                "file": (
+                    "notes.txt",
+                    b"Phishing emails contain suspicious links.",
+                    "text/plain",
+                )
+            },
+        )
+
+        self.assertEqual(response.status_code, 201)
+        self.assertEqual(response.json()["source_type"], "text")
+        evidence = self.request(
+            "POST",
+            "/search",
+            json={"query": "phishing suspicious links"},
+        ).json()["evidence"][0]
+        self.assertIsNone(evidence["page"])
+
+    def test_pasted_text_is_saved_to_private_library(self):
+        response = self.request(
+            "POST",
+            "/sources/text",
+            json={
+                "title": "Meeting notes",
+                "text": "Phishing emails contain suspicious links.",
+            },
+        )
+
+        self.assertEqual(response.status_code, 201)
+        self.assertEqual(response.json()["filename"], "Meeting notes")
+        self.assertEqual(self.request("GET", "/documents").json()[0]["source_type"], "text")
+
+    @patch(
+        "app.fetch_public_url",
+        return_value=FetchedSource(
+            content=(
+                b"<html><head><title>Security Guide</title></head>"
+                b"<body><p>Phishing emails contain suspicious links.</p></body></html>"
+            ),
+            content_type="text/html",
+            final_url="https://example.com/security",
+            encoding="utf-8",
+        ),
+    )
+    def test_public_url_is_fetched_indexed_and_keeps_source_link(self, _):
+        response = self.request(
+            "POST",
+            "/sources/url",
+            json={"url": "https://example.com/security"},
+        )
+
+        self.assertEqual(response.status_code, 201)
+        self.assertEqual(response.json()["filename"], "Security Guide")
+        self.assertEqual(response.json()["source_url"], "https://example.com/security")
+        evidence = self.request(
+            "POST",
+            "/search",
+            json={"query": "phishing suspicious links"},
+        ).json()["evidence"][0]
+        self.assertEqual(evidence["url"], "https://example.com/security")
+
+    @patch("app.answer_with_local_model", return_value={
+        "answer": "Phishing emails use suspicious links. [E1]",
+        "supported": True,
+        "citations": [{"id": "E1", "source": "Current result", "page": None}],
+        "evidence": [],
+    })
+    @patch(
+        "app.search_recent_web",
+        return_value=[{
+            "source": "Current result",
+            "url": "https://example.com/current",
+            "page": None,
+            "text": "Phishing emails contain suspicious links.",
+        }],
+    )
+    def test_ask_includes_fresh_web_results_and_private_source_evidence(
+        self,
+        mock_web_search,
+        mock_answer,
+    ):
+        response = self.request(
+            "POST",
+            "/ask",
+            json={"query": "phishing suspicious links"},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.json()["web_search_included"])
+        self.assertEqual(response.json()["web_sources_count"], 1)
+        mock_web_search.assert_called_once_with("phishing suspicious links", limit=3)
+        self.assertEqual(
+            mock_answer.call_args.args[1][0]["url"],
+            "https://example.com/current",
+        )
 
     def test_private_endpoints_require_an_account(self):
         for method, path, kwargs in (

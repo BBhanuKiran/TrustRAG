@@ -1,4 +1,6 @@
 import re
+import io
+import sqlite3
 import tempfile
 import unittest
 from pathlib import Path
@@ -130,3 +132,92 @@ class TestEvidenceIndex(unittest.TestCase):
         self.assertTrue(restarted_index.delete_document(document["id"]))
         self.assertEqual(restarted_index.list_documents(), [])
         self.assertEqual(restarted_index.search("phishing"), [])
+
+    def test_text_sources_are_searchable_without_fake_page_citations(self):
+        document = self.index.add_text(
+            "research-notes.txt",
+            "Phishing emails contain suspicious links.",
+            user_id="owner-a",
+            source_type="link",
+            source_url="https://example.com/security",
+        )
+
+        result = self.index.search("phishing suspicious links", user_id="owner-a")[0]
+        stored = self.index.list_documents("owner-a")[0]
+
+        self.assertEqual(document["source_type"], "link")
+        self.assertIsNone(result["page"])
+        self.assertEqual(result["url"], "https://example.com/security")
+        self.assertEqual(stored["source_url"], "https://example.com/security")
+        self.assertEqual(self.index.search("phishing", user_id="owner-b"), [])
+
+    def test_image_source_uses_local_ocr_and_is_indexed_as_text(self):
+        from PIL import Image
+
+        image_buffer = io.BytesIO()
+        Image.new("RGB", (20, 20), "white").save(image_buffer, format="PNG")
+        with patch(
+            "pytesseract.image_to_string",
+            return_value="Phishing emails contain suspicious links.",
+        ):
+            document = self.index.add_image(
+                "screenshot.png",
+                image_buffer.getvalue(),
+                user_id="owner-a",
+            )
+
+        result = self.index.search(
+            "phishing suspicious links",
+            user_id="owner-a",
+        )[0]
+        self.assertEqual(document["source_type"], "image")
+        self.assertIsNone(result["page"])
+        self.assertEqual(result["source"], "screenshot.png")
+
+    def test_existing_database_schema_migrates_to_sources(self):
+        legacy_database = Path(self.temp_dir.name) / "legacy.sqlite3"
+        connection = sqlite3.connect(legacy_database)
+        try:
+            connection.executescript(
+                """
+                CREATE TABLE documents (
+                    id TEXT PRIMARY KEY,
+                    filename TEXT NOT NULL,
+                    user_id TEXT NOT NULL DEFAULT 'local',
+                    uploaded_at TEXT NOT NULL,
+                    page_count INTEGER NOT NULL,
+                    chunk_count INTEGER NOT NULL
+                );
+                CREATE TABLE chunks (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    document_id TEXT NOT NULL REFERENCES documents(id)
+                        ON DELETE CASCADE,
+                    page INTEGER NOT NULL,
+                    text TEXT NOT NULL,
+                    embedding BLOB NOT NULL
+                );
+                INSERT INTO documents VALUES (
+                    'old-doc', 'old.pdf', 'owner-a', '2025-01-01T00:00:00+00:00', 1, 1
+                );
+                INSERT INTO chunks (document_id, page, text, embedding)
+                    VALUES ('old-doc', 1, 'Phishing emails.', X'00000000');
+                """
+            )
+        finally:
+            connection.close()
+
+        migrated_index = EvidenceIndex(
+            legacy_database,
+            encoder=fake_encoder,
+        )
+        document = migrated_index.list_documents("owner-a")[0]
+        with migrated_index._connection() as connection:
+            nullable_page = next(
+                column["notnull"] == 0
+                for column in connection.execute("PRAGMA table_info(chunks)")
+                if column["name"] == "page"
+            )
+
+        self.assertEqual(document["source_type"], "pdf")
+        self.assertIsNone(document["source_url"])
+        self.assertTrue(nullable_page)
